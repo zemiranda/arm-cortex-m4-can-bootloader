@@ -1,0 +1,8 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/zemiranda/Documents/me/embedded/arm-cortex-m4-can-bootloader/build/Debug/cmake_install.cmake",
+		"/home/zemiranda/Documents/me/embedded/arm-cortex-m4-can-bootloader/build/Debug/cmake/stm32cubemx/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
