@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "bootloader.h"
+#include "can_protocol.h"
 #include <stdint.h>
 /* USER CODE END Includes */
 
@@ -97,9 +98,16 @@ int main(void) {
   /* USER CODE BEGIN 2 */
 
   /* Variable declarations */
+  static bl_state_t bl_state = BL_WAIT;
+  static bl_status_t bl_status = BL_OK;
+  static uint8_t bl_number_tries = 0U;
+  /* Latter will be hardware coded by a unique combination of resistors (0 when
+   * being pulled low, 1 pulled high), to form a combination of a 4 bits with 16
+   * possible unique CAN IDs across the systems */
+  const uint8_t can_id = 0x01;
 
-  static bl_state_t bl_state = 0;
-
+  // can_protocol_configure_filters(&hcan, can_id);
+  // start can peripheral
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -109,7 +117,18 @@ int main(void) {
     switch (bl_state) {
 
     case BL_WAIT:
-      HAL_Delay(20);
+      bl_status = bootloader_wait_for_magic_frame(&hcan);
+      if (bl_status == BL_OK) {
+        bl_state = BL_ERASE;
+      } else if (bl_status == BL_TIMEOUT) {
+        // Go to application validation and jump
+        bl_state = BL_JUMP;
+      } else if (bl_status == BL_ERROR) {
+        // Error state of the bootloader, if the system is meet in this state it
+        // will need manual reset for retry
+        bl_state = BL_APP_INVALID;
+      }
+      bl_number_tries++;
       break;
 
     case BL_ERASE:
@@ -128,10 +147,6 @@ int main(void) {
       break;
 
     case BL_CRC:
-      HAL_Delay(20);
-      break;
-
-    case BL_APP_INVALID:
       HAL_Delay(20);
       break;
     default:
