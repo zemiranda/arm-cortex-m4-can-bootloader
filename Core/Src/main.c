@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "bootloader.h"
 #include "can_protocol.h"
+#include "stm32f3xx_it.h"
 #include <stdint.h>
 /* USER CODE END Includes */
 
@@ -104,8 +105,10 @@ int main(void) {
   /* Latter will be hardware coded by a unique combination of resistors (0 when
    * being pulled low, 1 pulled high), to form a combination of a 4 bits with 16
    * possible unique CAN IDs across the systems */
-  const uint8_t can_id = 0x01;
-
+  const uint8_t node_id = 0x01;
+  // This variable is received in the first magic frame
+  static uint32_t application_size = 0;
+  static uint8_t rxData[8] = {0};
   // can_protocol_configure_filters(&hcan, can_id);
   // start can peripheral
   /* USER CODE END 2 */
@@ -117,8 +120,16 @@ int main(void) {
     switch (bl_state) {
 
     case BL_WAIT:
-      bl_status = bootloader_wait_for_magic_frame(&hcan);
+      // TODO: Send a wake up CAN frame
+
+      bl_status =
+          bootloader_wait_for_magic_frame(&hcan, rxData, sizeof(rxData));
       if (bl_status == BL_OK) {
+        // Correct frame received
+        application_size =
+            ((uint32_t)rxData[3] << 0U) | ((uint32_t)rxData[2] << 8U) |
+            ((uint32_t)rxData[1] << 16U) | ((uint32_t)rxData[0] << 24U);
+
         bl_state = BL_ERASE;
       } else if (bl_status == BL_TIMEOUT) {
         // Go to application validation and jump
@@ -126,28 +137,51 @@ int main(void) {
       } else if (bl_status == BL_ERROR) {
         // Error state of the bootloader, if the system is meet in this state it
         // will need manual reset for retry
-        bl_state = BL_APP_INVALID;
+        bl_state = BL_FAILED;
       }
+
       bl_number_tries++;
       break;
 
     case BL_ERASE:
+
+      bl_status = bootloader_erase_flash(application_size);
+      if (bl_status == BL_OK) {
+
+        // Send erase success CAN frame to flasher
+
+        uint32_t can_id = can_protocol_format_id(
+            BL_PRIORITY_ID, BL_EXT_DATA_PAGE_ID, BL_DATA_PAGE_ID,
+            BL_ERASE_SUCCESS_PACKET_ID, BL_NODE_ID, BL_FLASHER_NODE_ID);
+
+        uint8_t txData[8] = {0};
+
+        can_protocol_send_frame(&hcan, can_id, txData);
+        bl_state = BL_READY;
+      }
+
       HAL_Delay(20);
       break;
+
     case BL_READY:
+      // Wait for the first CAN frame from flasher
       HAL_Delay(20);
       break;
 
     case BL_FLASH:
       HAL_Delay(20);
       break;
-
-    case BL_JUMP:
-      HAL_Delay(20);
-      break;
-
     case BL_CRC:
       HAL_Delay(20);
+      break;
+    case BL_JUMP:
+
+      // If application validation fails but no ERROR outside the application
+      // code integrity, go back to BL_WAIT and wait there for a new flash
+      HAL_Delay(20);
+      break;
+    case BL_FAILED:
+      Error_Handler();
       break;
     default:
       break;
