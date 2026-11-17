@@ -1,6 +1,7 @@
 #include "can_protocol.h"
 #include "bootloader.h"
 #include "stm32f3xx_hal.h"
+#include "stm32f3xx_hal_can.h"
 #include <stdint.h>
 
 #if (BL_USE_EXTENDED_ID)
@@ -17,7 +18,61 @@ uint32_t can_protocol_format_id(uint8_t priority, uint8_t ext_data_page,
          (((uint32_t)ext_data_page & 0x01U) << 25U) |
          (((uint32_t)data_page & 0x01U) << 24U) |
          (((uint32_t)packet_type) << 16U) | (((uint32_t)target_node_id) << 8U) |
-         (((uint32_t)source_node_id) << 0U);
+         ((uint32_t)source_node_id);
+}
+
+// Source Node ID is variable by hardware for this specific application
+bl_status_t can_protocol_configure_filters(CAN_HandleTypeDef *hcan,
+                                           uint8_t source_node_id) {
+  CAN_FilterTypeDef sFilterConfig = {0};
+
+  // Set the IDE (3 bit) to 1 for Extended ID
+  uint32_t bl_to_flasher_id = (((uint32_t)BL_FLASHER_NODE_ID & 0xFFU) << 8U) |
+                              ((uint32_t)source_node_id) | 0b100;
+
+  uint32_t flasher_to_bl_id = ((uint32_t)source_node_id << 8U) |
+                              ((uint32_t)BL_FLASHER_NODE_ID & 0xFFU) | 0b100;
+
+  // Last bit is 0 by reference manual
+  // Take in consideration only the last 16 bits, the IDE and RTR
+  uint32_t mask = ((uint32_t)0xFFFF << 3U) | 0b110;
+
+  // Bootloader to Flasher Filter
+  sFilterConfig.FilterBank = 0;
+  sFilterConfig.FilterMode = CAN_FILTERMODE_IDMASK;
+  sFilterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
+  sFilterConfig.FilterIdHigh = bl_to_flasher_id >> 16U;
+  sFilterConfig.FilterIdLow = bl_to_flasher_id & 0xFFFF;
+  sFilterConfig.FilterMaskIdHigh = mask >> 16U;
+  sFilterConfig.FilterMaskIdLow = mask & 0xFFFF;
+  sFilterConfig.FilterFIFOAssignment = CAN_RX_FIFO0;
+  sFilterConfig.FilterActivation = ENABLE;
+  // Meaningless for single CAN instances
+  sFilterConfig.SlaveStartFilterBank = 14;
+
+  if (HAL_CAN_ConfigFilter(hcan, &sFilterConfig) != HAL_OK) {
+    /* Filter configuration Error */
+    return BL_ERROR;
+  }
+
+  // Flasher to Bootloader Filter
+  sFilterConfig.FilterBank = 1;
+  sFilterConfig.FilterMode = CAN_FILTERMODE_IDMASK;
+  sFilterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
+  sFilterConfig.FilterIdHigh = flasher_to_bl_id >> 16U;
+  sFilterConfig.FilterIdLow = flasher_to_bl_id & 0xFFFF;
+  sFilterConfig.FilterMaskIdHigh = mask >> 16U;
+  sFilterConfig.FilterMaskIdLow = mask & 0xFFFF;
+  sFilterConfig.FilterFIFOAssignment = CAN_RX_FIFO0;
+  sFilterConfig.FilterActivation = ENABLE;
+  // Meaningless for single CAN instances
+  sFilterConfig.SlaveStartFilterBank = 14;
+
+  if (HAL_CAN_ConfigFilter(hcan, &sFilterConfig) != HAL_OK) {
+    /* Filter configuration Error */
+    return BL_ERROR;
+  }
+  return BL_OK;
 }
 
 // Verify timeout cast?

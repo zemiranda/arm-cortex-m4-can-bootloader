@@ -20,6 +20,7 @@
 
 /* Packet CAN IDs */
 
+#define BL_ALIVE_PACKET_ID 0x0
 #define BL_WAIT_MAGIC_PACKET_ID 0x1
 #define BL_ERASE_SUCCESS_PACKET_ID 0x2
 
@@ -33,6 +34,9 @@
 // Node ID (8 bits)]
 
 /* Function definitions */
+
+bl_status_t can_protocol_configure_filters(CAN_HandleTypeDef *hcan,
+                                           uint8_t source_node_id);
 
 bl_status_t can_protocol_poll_frame(CAN_HandleTypeDef *hcan,
                                     CAN_RxHeaderTypeDef *rxHeader,

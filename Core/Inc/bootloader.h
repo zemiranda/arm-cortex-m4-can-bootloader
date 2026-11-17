@@ -14,6 +14,12 @@ typedef enum {
   BL_FAILED
 } bl_state_t;
 
+typedef struct {
+  bl_state_t bl_state;
+  uint32_t application_size;
+  uint8_t bl_number_tries;
+} bl_t;
+
 typedef enum { BL_OK = 0, BL_ERROR, BL_TIMEOUT, BL_BUSY } bl_status_t;
 
 // 500 ms
