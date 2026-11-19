@@ -1,6 +1,8 @@
 #include "bootloader.h"
 #include "can_protocol.h"
 #include "stm32f3xx_hal.h"
+#include "stm32f3xx_hal_def.h"
+#include "stm32f3xx_hal_flash.h"
 #include <string.h>
 
 bl_status_t bootloader_wait_for_magic_frame(CAN_HandleTypeDef *hcan,
@@ -82,4 +84,38 @@ bl_status_t bootloader_erase_flash(uint32_t application_size) {
     // Last operation on falsh didnt finish on time
     return BL_TIMEOUT;
   }
+}
+
+bl_status_t bootloader_write_to_flash(uint32_t application_size) {
+
+  HAL_StatusTypeDef hal_status = HAL_OK;
+
+  hal_status = HAL_FLASH_Unlock();
+  if (hal_status != HAL_OK) {
+    return BL_ERROR;
+  }
+
+  uint32_t initial_address = FLASH_BASE_ADDRESS + APP_ADDRESS;
+  uint32_t address;
+  uint64_t data;
+
+  // After the success erase frame the flasher will start sending the data
+  // frames
+
+  bl_status_t bl_status = can_protocol_poll_frame(
+      CAN_HandleTypeDef * hcan, CAN_RxHeaderTypeDef * rxHeader, uint8_t *rxData,
+      uint8_t data_size, uint32_t timeout, uint32_t rxFifo, uint32_t can_id)
+
+      hal_status =
+          HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, address, data);
+
+  if (hal_status != HAL_OK) {
+    // TODO: Retry n times?
+    // TODO: Send error can frame
+    return BL_ERROR;
+  }
+
+  HAL_FLASH_Lock();
+
+  return BL_OK;
 }
